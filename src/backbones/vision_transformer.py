@@ -39,13 +39,13 @@ class Mlp(nn.Module):
                  in_features,
                  hidden_features=None,
                  out_features=None,
-                 act_layer=nn.GELU):
+                 bias=True):
         super().__init__()
         out_features = out_features or in_features 
         hidden_features = hidden_features or in_features 
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(hidden_features, out_features, bias=bias)
 
     def forward(self, x):
         x = self.fc1(x)
@@ -76,19 +76,15 @@ class Block(nn.Module):
                  num_heads,
                  mlp_ratio=4.,
                  qkv_bias=False,
-                 drop_path=0.,
-                 act_layer=nn.GELU,
-                 norm_layer=nn.LayerNorm):
+                 drop_path=0.):
         super().__init__()
-        self.norm1 = norm_layer(dim)
+        self.norm1 = nn.LayerNorm(dim, eps=1e-6)
         self.attn = Attention(dim,
                               num_heads=num_heads,
                               qkv_bias=qkv_bias)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        self.mlp = Mlp(in_features=dim,
-                       hidden_features=int(dim * mlp_ratio),
-                       act_layer=act_layer)
+        self.norm2 = nn.LayerNorm(dim, eps=1e-6)
+        self.mlp = Mlp(in_features=dim, hidden_features=int(dim * mlp_ratio))
         
     def forward(self, x):
         x_, attn = self.attn(self.norm1(x))
@@ -127,8 +123,7 @@ class VisionTransformer(nn.Module):
                  num_heads=12,
                  mlp_ratio=4.,
                  qkv_bias=False,
-                 drop_path_rate=0.1,
-                 norm_layer=nn.LayerNorm):
+                 drop_path_rate=0.1):
         super().__init__()
         self.input_size = input_size
         self.patch_size = patch_size
@@ -154,14 +149,14 @@ class VisionTransformer(nn.Module):
             num_heads=num_heads,
             mlp_ratio=mlp_ratio,
             qkv_bias=qkv_bias,
-            drop_path=dpr[i],
-            norm_layer=norm_layer
+            drop_path=dpr[i]
             ) for i in range(depth)
         ])
-        self.norm = norm_layer(embed_dim)
-
-        self.features = nn.Linear(embed_dim, num_features, bias=False)
-        self.f_norm = norm_layer(num_features)
+        self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
+        self.features = Mlp(in_features=embed_dim,
+                            hidden_features=num_features*4,
+                            out_features=num_features,
+                            bias=False)
 
         nn.init.normal_(self.pos_embed, std=.02)
         nn.init.normal_(self.cls_token, std=1e-6)
@@ -219,11 +214,11 @@ class VisionTransformer(nn.Module):
             x, attn = blk(x)
         x = self.norm(x)
 
-        features = self.f_norm(self.features(x[:, 0]))
+        features = self.features(x[:, 0])
         features_norm = nn.functional.normalize(features, dim=-1, p=2)
 
         if not return_attn: 
-            return features 
+            return features_norm 
         
-        attn = attn[:, :, 0, 1:]
+        attn = attn[:, :, 0, 1:].detach()
         return features_norm, attn

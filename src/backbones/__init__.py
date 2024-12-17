@@ -1,6 +1,5 @@
 import torch 
 import torch.nn as nn 
-from functools import partial 
 
 from .vision_transformer import VisionTransformer 
 
@@ -15,8 +14,7 @@ def get_backbone(cfg):
             depth=12,
             num_heads=3,
             mlp_ratio=4.,
-            qkv_bias=True,
-            norm_layer=partial(nn.LayerNorm, eps=1e-6)
+            qkv_bias=True
         )
     elif cfg.network == 'vit_s':
         model = VisionTransformer(
@@ -28,8 +26,7 @@ def get_backbone(cfg):
             depth=12,
             num_heads=6,
             mlp_ratio=4.,
-            qkv_bias=True,
-            norm_layer=partial(nn.LayerNorm, eps=1e-6)
+            qkv_bias=True
         )
     elif cfg.network == 'vit_m':
         model = VisionTransformer(
@@ -41,8 +38,7 @@ def get_backbone(cfg):
             depth=12,
             num_heads=8,
             mlp_ratio=4.,
-            qkv_bias=True,
-            norm_layer=partial(nn.LayerNorm, eps=1e-6)
+            qkv_bias=True
         )
     elif cfg.network == 'vit_b':
         model = VisionTransformer(
@@ -54,9 +50,7 @@ def get_backbone(cfg):
             depth=12,
             num_heads=12,
             mlp_ratio=4.,
-            qkv_bias=True,
-            norm_layer=partial(nn.LayerNorm, eps=1e-6)
-        )
+            qkv_bias=True        )
 
     else:
         raise ValueError(f'do not support backbone {cfg.network}')

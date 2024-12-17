@@ -142,7 +142,7 @@ if __name__ == '__main__':
                         cv2.putText(concat_img, f'{mat[min_x][min_y].item():.2f}', (input_size[1] * 3 - 20, 20), 0, 1, (255, 255, 0))
                         writer.add_image(f'image/face_images', concat_img[:,:,::-1], steps, dataformats='HWC')
 
-                        attn = attn.detach().cpu()
+                        attn = attn.cpu()
                         attn_arr = torch.cat([attn[idx].unsqueeze(0) for idx in [max_x, max_y, min_x, min_y]])
                         num, num_heads, _ = attn_arr.shape  
                         attn_arr = attn_arr.reshape(num, num_heads, input_size[0]//patch_size, input_size[1]//patch_size)
