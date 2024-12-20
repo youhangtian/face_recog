@@ -16,7 +16,7 @@ class MegaDataset(Dataset):
         for line in path_list:
             line = line.strip()
             self.images.append(line)
-            self.labels.append(line)
+            self.labels.append(line.split('/')[-2])
 
     def __len__(self):
         return len(self.images)
@@ -48,55 +48,41 @@ def get_mega_dataloader(root_dir, folder, batch_size, resize_hw=(112, 112)):
 
 
 @torch.no_grad()
-def get_acc(model, face_dataloaders, mega_dataloader, device='none'):
-    face_datas = [{} for _ in range(len(face_dataloaders))] 
-    mega_data = {}
-
-    for idx in range(len(face_dataloaders)):
-        for inputs, labels in tqdm(face_dataloaders[idx], f'[{device}] face features'):
+def get_acc(model, mega_dataloaders, device='none'):
+    feature_dict_arr = [{} for _ in range(len(mega_dataloaders))] 
+    for i in range(len(mega_dataloaders)):
+        for inputs, labels in tqdm(mega_dataloaders[i], f'[{device}] extract features {i}'):
             features = model(inputs.cuda()).detach().cpu().numpy()
 
             for feature, label in zip(features, labels):
-                face_datas[idx][label] = feature
+                features_arr = feature_dict_arr[i].get(label, [])
+                features_arr.append(feature)
+                feature_dict_arr[i][label] = features_arr
 
-    for inputs, labels in tqdm(mega_dataloader, f'[{device}] mega features'):
-        features = model(inputs.cuda()).detach().cpu().numpy()
-
-        for feature, label in zip(features, labels):
-            mega_data[label] = feature
-
-    mega_arr = []
-    for key, val in mega_data.items():
-        mega_arr.append(val)
-    mega_arr = np.array(mega_arr)
+    distractor_features = []
+    for key, val in feature_dict_arr[-1].items():
+        distractor_features.extend(val)
+    distractor_features = np.array(distractor_features)
     
     acc_arr = []
-    for idx in range(len(face_dataloaders)):
-        face_data = face_datas[idx]
-        face_dict = {}
-        for key, val in face_data.items():
-            k = key.split('/')[-2]
-
-            arr = face_dict.get(k, [])
-            arr.append(val)
-            face_dict[k] = arr 
-
+    for i in range(len(feature_dict_arr[:-1])):
+        query_dict = feature_dict_arr[i]
         count = [0, 0]
-
-        with tqdm(face_dict.items(), f'[{device}] acc') as t:
+        with tqdm(query_dict.items(), f'[{device}] acc') as t:
             for key, val in t:
-                arr = np.array(val)
-                arr_dot = np.dot(arr, arr.T)
+                query_features = np.array(val)
+                qq_sim = np.dot(query_features, query_features.T)
 
-                matrix = np.dot(arr, mega_arr.T)
-                matrix_max = [max(m) for m in matrix]
+                qd_sim = np.dot(query_features, distractor_features.T)
+                qd_sim_max = [max(m) for m in qd_sim]
 
-                for i in range(len(arr)):
-                    for j in range(i + 1, len(arr), 1):
-                        if arr_dot[i][j] > matrix_max[i]: count[0] += 1
-                        if arr_dot[i][j] > matrix_max[j]: count[0] += 1
+                for i in range(len(query_features)):
+                    for j in range(i + 1, len(query_features), 1):
+                        if qq_sim[i][j] > qd_sim_max[i]: count[0] += 1
+                        if qq_sim[i][j] > qd_sim_max[j]: count[0] += 1
                         count[1] += 2
 
+                print(count)
                 t.set_postfix(str=f'acc: {count[0]/count[1]*100:.2f}%')
 
         acc_arr.append(count[0]/count[1])
@@ -135,5 +121,5 @@ if __name__ == '__main__':
     model = accelerator.prepare(backbone)
     model.eval()
     with accelerator.autocast():
-        acc_arr = get_acc(model, megaface_dataloaders[:-1], megaface_dataloaders[-1])
+        acc_arr = get_acc(model, megaface_dataloaders)
     print(acc_arr)

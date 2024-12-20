@@ -140,7 +140,6 @@ if __name__ == '__main__':
 
                         cv2.putText(concat_img, f'{mat[max_x][max_y].item():.2f}', (input_size[1] - 20, 20), 0, 1, (255, 255, 0))
                         cv2.putText(concat_img, f'{mat[min_x][min_y].item():.2f}', (input_size[1] * 3 - 20, 20), 0, 1, (255, 255, 0))
-                        writer.add_image(f'image/face_images', concat_img[:,:,::-1], steps, dataformats='HWC')
 
                         attn = attn.cpu()
                         attn_arr = torch.cat([attn[idx].unsqueeze(0) for idx in [max_x, max_y, min_x, min_y]])
@@ -155,7 +154,11 @@ if __name__ == '__main__':
                             attn_arr_sum.append(arr_sum.astype('uint8'))
 
                         attn_concat_img = np.concatenate((attn_arr_sum), axis=1)
-                        writer.add_image(f'image/heatmap', attn_concat_img, steps, dataformats='HW')
+                        attn_concat_img = np.expand_dims(attn_concat_img, axis=-1)
+                        attn_concat_img = np.repeat(attn_concat_img, 3, axis=-1)
+
+                        show_img = np.concatenate([concat_img, attn_concat_img], axis=0)[:,:,::-1]
+                        writer.add_image(f'image/heatmap', show_img, steps, dataformats='HWC')
 
             if (steps % cfg.log_freq == 0) and logger:
                 logger.info(f'[epoch{epoch}] steps {steps}, lr {opt.param_groups[0]['lr']:.8f}, loss {loss_am.avg:.4f} ------')
@@ -166,7 +169,7 @@ if __name__ == '__main__':
         if len(megaface_folders) > 1:
             model.eval()
             with accelerator.autocast():
-                acc_arr = get_acc(model, megaface_dataloaders[:-1], megaface_dataloaders[-1], device=accelerator.device)
+                acc_arr = get_acc(model, megaface_dataloaders, device=accelerator.device)
 
             if logger:
                 for i in range(len(megaface_folders) - 1):
